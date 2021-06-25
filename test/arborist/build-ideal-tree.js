@@ -226,7 +226,7 @@ t.test('cyclical peer deps', t => {
       .then(() => t.resolveMatchSnapshot(printIdeal(path, {
         add: ['@isaacs/peer-dep-cycle-b@2.x'],
         legacyPeerDeps: true,
-      })))
+      }), 'add b@2.x with legacy peer deps'))
       .then(() => t.resolveMatchSnapshot(printIdeal(path, {
         // use @latest rather than @2.x to exercise the 'explicit tag' path
         add: ['@isaacs/peer-dep-cycle-b@latest'],
@@ -499,7 +499,7 @@ t.test('respect the yarn.lock file version, if lacking resolved', t =>
   t.resolveMatchSnapshot(printIdeal(
     resolve(fixtures, 'yarn-lock-mkdirp-no-resolved'))))
 
-t.test('optional dependency failures', t => {
+t.test('optional dependency failures', async t => {
   const cases = [
     'optional-ok',
     'optional-dep-enotarget',
@@ -508,8 +508,10 @@ t.test('optional dependency failures', t => {
     'optional-metadep-missing',
   ]
   t.plan(cases.length)
-  cases.forEach(c => t.resolveMatchSnapshot(printIdeal(
-    resolve(fixtures, c)), c))
+  for (const c of cases) {
+    const tree = await printIdeal(resolve(fixtures, c))
+    t.matchSnapshot(tree, c)
+  }
 })
 
 t.test('prod dependency failures', t => {
@@ -543,7 +545,7 @@ t.test('link dep within node_modules and outside root', t => {
 // some cases that are hard to hit without very elaborate dep trees
 // and precise race conditions, so we just create some contrived
 // examples here.
-t.test('contrived dep placement tests', t => {
+t.test('contrived dep placement tests', { skip: 'move to CanPlaceDep tests' }, t => {
   const kCanPlaceDep = Symbol.for('canPlaceDep')
   const kPlaceDep = Symbol.for('placeDep')
   const kUpdateNames = Symbol.for('updateNames')
@@ -1858,7 +1860,7 @@ t.test('more peer dep conflicts', t => {
     },
   })
 
-  t.jobs = cases.length
+  // t.jobs = cases.length
   t.plan(cases.length)
 
   for (const [name, {pkg, error, resolvable, add}] of cases) {
@@ -1890,12 +1892,12 @@ t.test('more peer dep conflicts', t => {
           console.error(printTree(strictRes))
         t.match(strictRes, { code: 'ERESOLVE' })
       } else if (strictRes instanceof Error)
-        t.fail('should not get error in strict mode', strictRes)
+        t.fail('should not get error in strict mode', { error: strictRes })
       else
         t.matchSnapshot(printTree(strictRes), 'strict result')
 
       if (forceRes instanceof Error)
-        t.fail('should not get error when forced', forceRes)
+        t.fail('should not get error when forced', { error: forceRes })
       else
         t.matchSnapshot(printTree(forceRes), 'force result')
 
@@ -1904,7 +1906,7 @@ t.test('more peer dep conflicts', t => {
           console.error(printTree(defRes))
         t.match(defRes, { code: 'ERESOLVE' })
       } else if (defRes instanceof Error)
-        t.fail('should not get error in default mode', defRes)
+        t.fail('should not get error in default mode', { error: defRes })
       else {
         if (resolvable)
           t.strictSame(warnings, [])
@@ -2441,19 +2443,22 @@ t.test('peer dep that needs to be replaced', async t => {
   t.matchSnapshot(await printIdeal(path))
 })
 
-t.test('peer dep override with dep sets being replaced', async t => {
-  // in this case, because our root depends on webpack 5, and on something
-  // that has a peer dependency on webpack 4, it overrides but otherwise fails.
+t.test('transitive conflicted peer dependency', async t => {
+  // see test/fixtures/testing-transitive-conflicted-peer/README.md
+  // for a thorough explanation.
   const path = t.testdir({
     'package.json': JSON.stringify({
-      devDependencies: {
-        webpack: '5.0.0',
-        'webpack-dev-server': '3.11.0',
-      },
+      dependencies: {
+        '@isaacs/testing-transitive-conflicted-peer-a': '1',
+        '@isaacs/testing-transitive-conflicted-peer-b': '2'
+      }
     }),
   })
-  await t.rejects(printIdeal(path), { code: 'ERESOLVE' })
-  t.matchSnapshot(await printIdeal(path, { force: true }))
+  const strict = { strictPeerDeps: true }
+  const force = { force: true }
+  t.matchSnapshot(await printIdeal(path))
+  t.matchSnapshot(await printIdeal(path, force))
+  await t.rejects(printIdeal(path, strict), { code: 'ERESOLVE' })
 })
 
 t.test('remove deps when initializing tree from actual tree', async t => {
