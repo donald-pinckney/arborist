@@ -2450,8 +2450,8 @@ t.test('transitive conflicted peer dependency', async t => {
     'package.json': JSON.stringify({
       dependencies: {
         '@isaacs/testing-transitive-conflicted-peer-a': '1',
-        '@isaacs/testing-transitive-conflicted-peer-b': '2'
-      }
+        '@isaacs/testing-transitive-conflicted-peer-b': '2',
+      },
     }),
   })
   const strict = { strictPeerDeps: true }
