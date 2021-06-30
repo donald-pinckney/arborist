@@ -268,10 +268,22 @@ t.test('show workspaces in printable node output', t => {
     pkg: {
       name: 'a',
       version: '1.2.3',
+      peerDependencies: {
+        c: '1.2.3',
+      },
     },
     realpath: '/home/user/projects/root/packages/a',
     parent: tree,
   })
+  const a = tree.children.get('a').target
+  new Node({
+    parent: tree,
+    pkg: {
+      name: 'c',
+      version: '1.2.4',
+    },
+  })
+  a.edgesOut.get('c').overridden = true
   new Link({
     pkg: {
       name: 'b',
