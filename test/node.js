@@ -2558,7 +2558,7 @@ t.test('node.ancestry iterator', t => {
   const g = d.children.get('e').children.get('f').children.get('g')
 
   const ancestry = [...g.ancestry()].map(n => n.packageName)
-  t.strictSame(ancestry, [ 'g', 'f', 'e', 'd', 'c', 'b', 'a', 'root' ])
+  t.strictSame(ancestry, ['g', 'f', 'e', 'd', 'c', 'b', 'a', 'root'])
   t.end()
 })
 
