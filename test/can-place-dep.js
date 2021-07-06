@@ -9,8 +9,6 @@ const {
 
 const Node = require('../lib/node.js')
 
-
-
 t.test('basic placement check tests', t => {
   const path = '/some/path'
 
@@ -21,6 +19,7 @@ t.test('basic placement check tests', t => {
     nodeLoc,
     dep,
     expect,
+    expectSelf,
     preferDedupe,
     peerSet,
     explicitRequest,
@@ -35,6 +34,14 @@ t.test('basic placement check tests', t => {
       children: peerSet,
     })
     dep.parent = vr
+
+    // mark any invalid edges in the virtual root as overridden
+    for (const child of vr.children.values()) {
+      for (const edgeIn of child.edgesIn) {
+        if (edgeIn.invalid)
+          edgeIn.overridden = true
+      }
+    }
 
     const msg = `place ${
       dep.package._id
@@ -57,6 +64,8 @@ t.test('basic placement check tests', t => {
       // super awkwardly, and Node objects have a lot of those.
       if (!t.equal(cpd.canPlace, expect, msg))
         t.comment(cpd)
+      if (expectSelf)
+        t.equal(cpd.selfCanPlace, expectSelf, msg)
       t.equal(cpd.description, cpd.canPlace.description || cpd.canPlace)
       t.end()
     })
@@ -288,6 +297,524 @@ t.test('basic placement check tests', t => {
     nodeLoc: 'node_modules/b',
     dep: new Node({ pkg: { name: 'a', version: '2.3.4' }}),
     expect: CONFLICT,
+  })
+
+  // peer dep shenanigans
+  runTest('basic placement with peers', {
+    tree: new Node({
+      path,
+      pkg: { name: 'project', version: '1.2.3', dependencies: { a: '1.x' }},
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'a', version: '1.2.3', peerDependencies: { b: '1' }},
+    }),
+    expect: OK,
+    peerSet: [
+      {pkg: {name: 'b', version: '1.2.3' }},
+    ],
+  })
+
+  runTest('peer with peers', {
+    tree: new Node({
+      path,
+      pkg: { name: 'project', version: '1.2.3', dependencies: { a: '1.x' }},
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'a', version: '1.2.3', peerDependencies: { b: '1' }},
+    }),
+    expect: OK,
+    peerSet: [
+      {pkg: {name: 'b', version: '1.2.3', peerDependencies: { c: '1' }}},
+      {pkg: {name: 'c', version: '1.2.3'}},
+    ],
+  })
+
+  runTest('peers with overridden edges in peerSet', {
+    tree: new Node({
+      path,
+      pkg: { name: 'project', version: '1.2.3', dependencies: { a: '1.x' }},
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'a', version: '1.2.3', peerDependencies: { b: '1' }},
+    }),
+    expect: OK,
+    peerSet: [
+      {pkg: {name: 'b', version: '1.2.3', peerDependencies: { c: '1' }}},
+      {pkg: {name: 'c', version: '1.2.3', peerDependencies: { b: '2', a: '2' }}},
+    ],
+  })
+
+  runTest('peers with overridden edges in peerSet from dependent', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          c: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'c', version: '2.0.1', peerDependencies: { b: '2', a: '2' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'a', version: '1.2.3', peerDependencies: { b: '1' }},
+    }),
+    expect: OK,
+    peerSet: [
+      {pkg: {name: 'b', version: '1.2.3', peerDependencies: { c: '1' }}},
+      {pkg: {name: 'c', version: '2.2.3', peerDependencies: { b: '2', a: '2' }}},
+    ],
+  })
+
+  runTest('replacing existing peer set', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          c: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', peerDependencies: { b: '1' }}},
+        {pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '2.0.1', peerDependencies: { b: '2', a: '2' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'a', version: '1.2.3', peerDependencies: { b: '1' }},
+    }),
+    expect: REPLACE,
+    peerSet: [
+      {pkg: {name: 'b', version: '1.2.3', peerDependencies: { c: '1' }}},
+      {pkg: {name: 'c', version: '2.2.3', peerDependencies: { b: '2', a: '2' }}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set which can be pushed deeper, no current', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { b: '1' }}},
+        {pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '2.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: OK,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+      {pkg: {name: 'c', version: '2.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set which can be pushed deeper, with invalid current', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { b: '1' }}},
+        {pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+        {pkg: {name: 'd', version: '1.1.1', peerDependencies: { b: '1' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '2.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: REPLACE,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+      {pkg: {name: 'c', version: '2.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set which can be pushed deeper, with valid current', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '1.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { b: '1' }}},
+        {pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+        {pkg: {name: 'd', version: '1.1.1', peerDependencies: { b: '1' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '1.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: REPLACE,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+      {pkg: {name: 'c', version: '2.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set which can be pushed deeper, conflict on peer', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '1.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { bb: '1' }}},
+        {pkg: {name: 'bb', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+        {pkg: {name: 'd', version: '1.1.1', peerDependencies: { c: '1' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '1.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: REPLACE,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+      {pkg: {name: 'c', version: '2.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set cannot be pushed deeper, but new dep set can', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { b: '1' }}},
+        {pkg: {name: 'd', version: '2.2.2', peerDependencies: { b: '2' }}},
+        {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+        {pkg: {name: 'c', version: '2.2.2'}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: 'node_modules/a',
+    dep: new Node({
+      pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }},
+    }),
+    expect: CONFLICT,
+    peerSet: [
+      {pkg: {name: 'c', version: '1.0.1'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('nest peer set under dependent node', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { b: '1' }}},
+        {pkg: {name: 'd', version: '2.2.2', peerDependencies: { b: '2' }}},
+        {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+        {pkg: {name: 'c', version: '2.2.2'}},
+      ],
+    }),
+    targetLoc: 'node_modules/a',
+    nodeLoc: 'node_modules/a',
+    dep: new Node({
+      pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }},
+    }),
+    expect: OK,
+    peerSet: [
+      {pkg: {name: 'c', version: '1.0.1'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set cannot be pushed deeper, neither can new set', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '2.x',
+        },
+      },
+      children: [
+        {pkg: {name: 'a', version: '1.0.1', peerDependencies: { b: '1' }}},
+        {pkg: {name: 'd', version: '2.2.2', peerDependencies: { b: '2' }}},
+        {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+        {pkg: {name: 'c', version: '2.2.2'}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: 'node_modules/a',
+    dep: new Node({
+      pkg: {name: 'b', version: '1.0.1', peerDependencies: { c: '1' }},
+    }),
+    expect: CONFLICT,
+    peerSet: [
+      {pkg: {name: 'c', version: '1.0.1'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set cannot be pushed deeper, neither can new set, conflict on peer xyz', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '1.x',
+        },
+      },
+      children: [
+        // the bb dep could be nested, but it has a peerDep on c, and
+        // a would be fine with the c@2, but can't nest its c@1 dep
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { bb: '1' }, peerDependencies: { c: '*' }}},
+        {pkg: {name: 'bb', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+        {pkg: {name: 'd', version: '1.1.1', peerDependencies: { c: '1' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '1.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: CONFLICT,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+      {pkg: {name: 'c', version: '2.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  // root -> (a@1, d@1)
+  // a@1.0.1 -> (bb@1), PEER(c)
+  // bb@1.0.1 -> (cc@1), PEER(c)
+  // cc@1.0.1 -> PEER(dd@1)
+  // dd@1.0.1 -> PEER(c@1)
+  // d@1.0.1 -> PEER(c)
+  // d@1.2.2 -> PEER(b@2)
+  // b@2.2.2 -> PEER(c@2)
+  //
+  // root
+  // +-- a@1.0.1
+  // +-- bb@1.0.1
+  // +-- cc@1.0.1
+  // +-- dd@1.0.1
+  // +-- c@1.0.1
+  // +-- d@1.1.1
+  //
+  // PLACE d@1.2.2 in root. peerSet(b@2, c@2)
+  // REPLACE d@1.0.1
+  // OK b@2 (no current, no conflicting edges)
+  // c@1.0.1 -> c@2.2.2?
+  //   entry edges:
+  //    root->(a): no replacement
+  //      a->(c): replacement satisfies
+  //      a->(bb): not a peer edge
+  //    >> can replace
+  //    a->(bb):
+  //      bb->(c): replacement satisfies
+  //      bb->(cc): not a peer edge
+  //    root->(d): is cpd peerEntryEdge, skip
+  //    bb->(cc): no replacement
+  //      dd->(cc): not a peer edge
+  //    >> can replace
+
+  runTest('existing peer set cannot be pushed deeper, neither can new set, conflict on deep peer xyz', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '1.x',
+        },
+      },
+      children: [
+        // the bb dep could be nested, but it has a peerDep on c, and
+        // a would be fine with the c@2, but can't nest its c@1 dep
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { bb: '1' }, peerDependencies: { c: '*' }}},
+        {pkg: {name: 'bb', version: '1.0.1', dependencies: { cc: '1' }, peerDependencies: { c: '*' }}},
+        {pkg: {name: 'cc', version: '1.0.1', peerDependencies: { dd: '1' }}},
+        {pkg: {name: 'dd', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+        {pkg: {name: 'd', version: '1.1.1', peerDependencies: { c: '1' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '1.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: CONFLICT,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '2' }}},
+      {pkg: {name: 'c', version: '2.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  runTest('existing peer set cannot be pushed deeper, neither can new set, replacement satisfies', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '1.x',
+          d: '1.x',
+        },
+      },
+      children: [
+        // the bb dep could be nested, but it has a peerDep on c, and
+        // a would be fine with the c@2, but can't nest its c@1 dep
+        {pkg: {name: 'a', version: '1.0.1', dependencies: { bb: '1' }, peerDependencies: { c: '*' }}},
+        {pkg: {name: 'bb', version: '1.0.1', dependencies: { cc: '1' }, peerDependencies: { c: '*' }}},
+        {pkg: {name: 'cc', version: '1.0.1', dependencies: { dd: '1' }, peerDependencies: { c: '*' }}},
+        {pkg: {name: 'dd', version: '1.0.1', peerDependencies: { c: '1' }}},
+        {pkg: {name: 'c', version: '1.0.1'}},
+        {pkg: {name: 'd', version: '1.1.1', peerDependencies: { c: '1' }}},
+      ],
+    }),
+    targetLoc: '',
+    nodeLoc: '',
+    dep: new Node({
+      pkg: { name: 'd', version: '1.2.2', peerDependencies: { b: '2' }},
+    }),
+    expect: REPLACE,
+    peerSet: [
+      {pkg: {name: 'b', version: '2.2.2', peerDependencies: { c: '1' }}},
+      {pkg: {name: 'c', version: '1.2.2'}},
+    ],
+    explicitRequest: true,
+  })
+
+  // a -> (b, c) PEER(p)
+  // b -> (c@1, d@2) PEER(p)
+  // c@1 -> (d@1) PEER(p)
+  // c@2 -> (d@2) PEER(p)
+  // d@1 -> PEER(p@1)
+  // d@2 -> PEER(p@2)
+  // root
+  // +-- a
+  // +-- b
+  // |   +-- c@1
+  // |       +-- d@1 <-- cannot place p@1 peer dep!
+  // +-- p@2
+  // +-- c@2
+  // +-- d@2
+  runTest('peer all the way down, conflict but not ours', {
+    tree: new Node({
+      path,
+      pkg: { dependencies: { a: '' }},
+      children: [
+        {
+          pkg: {
+            name:'a',
+            version:'1.0.0',
+            dependencies: { b: '', c: '' },
+            peerDependencies: { p: '' },
+          },
+        },
+        {
+          pkg: {
+            name: 'b',
+            version: '1.0.0',
+            dependencies: { c: '1', d: '2' },
+            peerDependencies: { p: '' },
+          },
+          children: [
+            {
+              pkg: {
+                name: 'c',
+                version: '1.0.0',
+                dependencies: { d: '1' }, // <-- the dep we'll try to place
+                peerDependencies: { p: '' },
+              },
+            },
+          ],
+        },
+        { pkg: { name: 'p', version: '2.0.0' } },
+        { pkg: { name: 'c', version: '2.0.0' } },
+        { pkg: { name: 'd', version: '2.0.0' } },
+      ],
+    }),
+    dep: new Node({
+      pkg: { name: 'd', version: '1.0.0', peerDependencies: { p: '1' }},
+    }),
+    peerSet: [{ pkg: { name: 'p', version: '1.0.0' }}],
+    nodeLoc: 'node_modules/b/node_modules/c',
+    targetLoc: 'node_modules/b/node_modules/c',
+    expect: CONFLICT,
+    expectSelf: OK,
   })
 
   t.end()
