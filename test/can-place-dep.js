@@ -65,7 +65,7 @@ t.test('basic placement check tests', t => {
       if (!t.equal(cpd.canPlace, expect, msg))
         t.comment(cpd)
       if (expectSelf)
-        t.equal(cpd.selfCanPlace, expectSelf, msg)
+        t.equal(cpd.canPlaceSelf, expectSelf, msg)
       t.equal(cpd.description, cpd.canPlace.description || cpd.canPlace)
       t.end()
     })
@@ -88,7 +88,7 @@ t.test('basic placement check tests', t => {
     tree: new Node({
       path,
       pkg: { name: 'project', version: '1.2.3', dependencies: { a: '1.x' }},
-      children: [{pkg:{name: 'a', version: '1.0.0'}}],
+      children: [{pkg: {name: 'a', version: '1.0.0'}}],
     }),
     targetLoc: '',
     nodeLoc: '',
@@ -101,7 +101,7 @@ t.test('basic placement check tests', t => {
       path,
       pkg: { name: 'project', version: '1.2.3', dependencies: { a: '1.x' }},
       children: [
-        {pkg:{name: 'a', version: '1.0.0'}},
+        {pkg: {name: 'a', version: '1.0.0'}},
         {
           pkg: { name: 'b', version: '1.0.0', dependencies: { a: '2.x' }},
         },
@@ -118,7 +118,7 @@ t.test('basic placement check tests', t => {
       path,
       pkg: { name: 'project', version: '1.2.3', dependencies: { a: '1.x' }},
       children: [
-        {pkg:{name: 'a', version: '1.0.0'}},
+        {pkg: {name: 'a', version: '1.0.0'}},
         {
           pkg: { name: 'b', version: '1.0.0', dependencies: { a: '2.x' }},
         },
@@ -162,10 +162,14 @@ t.test('basic placement check tests', t => {
   runTest('replace an existing dep that could dedupe, explicit request', {
     tree: new Node({
       path,
-      pkg: { name: 'project', version: '1.2.3', dependencies: {
-        a: '*',
-        b: '1.2.3',
-      }},
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '*',
+          b: '1.2.3',
+        },
+      },
       children: [
         {pkg: {name: 'a', version: '1.2.3'}},
         {pkg: {name: 'b', version: '1.2.3', dependencies: {a: '1.2.3'}}},
@@ -180,10 +184,14 @@ t.test('basic placement check tests', t => {
   runTest('keep an existing dep that could dedupe, explicit request, preferDedupe', {
     tree: new Node({
       path,
-      pkg: { name: 'project', version: '1.2.3', dependencies: {
-        a: '*',
-        b: '1.2.3',
-      }},
+      pkg: {
+        name: 'project',
+        version: '1.2.3',
+        dependencies: {
+          a: '*',
+          b: '1.2.3',
+        },
+      },
       children: [
         {pkg: {name: 'a', version: '1.2.3'}},
         {pkg: {name: 'b', version: '1.2.3', dependencies: {a: '1.2.3'}}},
@@ -468,7 +476,20 @@ t.test('basic placement check tests', t => {
     explicitRequest: true,
   })
 
-  runTest('existing peer set which can be pushed deeper, with valid current', {
+  // root -> (a@1, d@1)
+  // a@1.0.1 -> (b@1)
+  // b@1.0.1 -> PEER(c@1)
+  // d@1.1.1 -> PEER(b@1)
+  // d@1.2.2 -> PEER(b@2)
+  // b@2.2.2 -> PEER(c@2)
+  //
+  // root
+  // +-- a@1.0.1
+  // +-- b@1.0.1 <-- can be pushed under a, along with c & d
+  // +-- c@1.0.1
+  // +-- d@1.0.1
+  // PLACE(d@1.2.2<b@2.2.2, c@2.2.2>)
+  runTest('xyz existing peer set which can be pushed deeper, with valid current', {
     tree: new Node({
       path,
       pkg: {
@@ -757,6 +778,7 @@ t.test('basic placement check tests', t => {
     explicitRequest: true,
   })
 
+  // root -> (a)
   // a -> (b, c) PEER(p)
   // b -> (c@1, d@2) PEER(p)
   // c@1 -> (d@1) PEER(p)
@@ -778,8 +800,8 @@ t.test('basic placement check tests', t => {
       children: [
         {
           pkg: {
-            name:'a',
-            version:'1.0.0',
+            name: 'a',
+            version: '1.0.0',
             dependencies: { b: '', c: '' },
             peerDependencies: { p: '' },
           },
@@ -803,8 +825,8 @@ t.test('basic placement check tests', t => {
           ],
         },
         { pkg: { name: 'p', version: '2.0.0' } },
-        { pkg: { name: 'c', version: '2.0.0' } },
-        { pkg: { name: 'd', version: '2.0.0' } },
+        { pkg: { name: 'c', version: '2.0.0', peerDependencies: { p: '' }}},
+        { pkg: { name: 'd', version: '2.0.0', peerDependencies: { p: '2' }}},
       ],
     }),
     dep: new Node({
@@ -826,14 +848,14 @@ t.test('constructor debug throws', t => {
   })
 
   t.throws(() => new CanPlaceDep({
-    dep: new Node({pkg:{name:'x',version:'1.2.3'}}),
+    dep: new Node({pkg: {name: 'x', version: '1.2.3'}}),
   }), {
     message: 'no target provided to CanPlaceDep',
   })
 
   t.throws(() => new CanPlaceDep({
-    dep: new Node({pkg:{name:'x',version:'1.2.3'}}),
-    target: new Node({ path: '/some/path' })
+    dep: new Node({pkg: {name: 'x', version: '1.2.3'}}),
+    target: new Node({ path: '/some/path' }),
   }), {
     message: 'no edge provided to CanPlaceDep',
   })
