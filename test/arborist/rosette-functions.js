@@ -41,16 +41,75 @@ function constraintInterpretationProperty(input) {
   return (semverMatch && dslMatch) || ((!semverMatch) && (!dslMatch))
 }
 
+function generateInt(max) {
+  return Math.floor(Math.random() * max);
+}
+
+function randomBool(p) {
+  return Math.random() < p;
+}
+
+function randomChoice(...xs) {
+  return xs[generateInt(xs.length)]
+}
+
+function generateRandomVersion() {
+  const major = generateInt(6)
+  const minor = generateInt(6)
+  const patch = generateInt(6)
+  const prerelease = ['alpha', 'beta', 'rc'].filter(() => randomBool(0.15)).flatMap(tag => {
+    if(randomBool(0.5)) {
+      return [tag, generateInt(3)]
+    } else {
+      return [tag]
+    }
+  }).join('.')
+
+  return `${major}.${minor}.${patch}${prerelease ? `-${prerelease}` : ''}`
+}
+
+function generateComparator() {
+  const version = generateRandomVersion()
+  const op = randomChoice(">", "<", ">=", "<=", "=")
+  return new semver.Comparator(`${op}${version}`)
+}
+
+function generateRange() {
+  const numDisj = generateInt(4)
+  // const set = Array.from(Array(numDisj), () => 1)
+  const set = Array.from(Array(numDisj), () => generateInt(4))
+    .map(numConj => Array.from(Array(numConj), () => generateComparator()))
+  let r = new semver.Range('1.2.3') // tmp
+  r.set = set
+  r.format()
+  return r
+}
+
 function generateConstraintintInterpretationInput() {
+  const version = generateRandomVersion()
+  const numOthers = generateInt(10)
+  let known = Array.from(Array(numOthers), () => generateRandomVersion())
+  known.push(version)
+
+  const range = generateRange()
+
+  const rangeVersions = range.set.flatMap(conj => {
+    return conj.map(comp => {
+      return comp.semver.format()
+    })
+  })
+
+  known = known.concat(rangeVersions)
+
   return {
-    versionString: '1.2.3', 
-    knownVersions: ['1.2.3', '1.2.4', '1.2.5'], 
-    rangeString: '>=1.2.3 <1.2.6'
+    versionString: version, 
+    knownVersions: known, 
+    rangeString: range.format()
   }
 }
 
 
-function propertyTest(inputFn, propertyFn, name, num = 100) {
+function propertyTest(inputFn, propertyFn, name, num = 10000) {
   t.test(name, t => {
     for (let index = 0; index < num; index++) {
       const input = inputFn()
@@ -61,4 +120,16 @@ function propertyTest(inputFn, propertyFn, name, num = 100) {
   
 }
 
-propertyTest(generateConstraintintInterpretationInput, constraintInterpretationProperty, 'constraintInterpretation')
+// console.log(generateConstraintintInterpretationInput())
+// console.log(generateConstraintintInterpretationInput())
+// console.log(generateConstraintintInterpretationInput())
+// console.log(generateConstraintintInterpretationInput())
+// console.log(generateConstraintintInterpretationInput())
+// console.log(generateConstraintintInterpretationInput())
+// console.log(generateConstraintintInterpretationInput())
+
+
+propertyTest(
+  generateConstraintintInterpretationInput, 
+  constraintInterpretationProperty, 
+  'constraintInterpretation')
