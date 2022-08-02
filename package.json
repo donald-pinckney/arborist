@@ -1,7 +1,7 @@
 {
-  "name": "@npmcli/arborist",
+  "name": "min-arborist",
   "version": "2.7.0",
-  "description": "Manage node_modules trees",
+  "description": "A fork of arborsit with Pacsolve built-in",
   "dependencies": {
     "@npmcli/installed-package-contents": "^1.0.7",
     "@npmcli/map-workspaces": "^1.0.2",
@@ -17,6 +17,7 @@
     "immutable": "^4.0.0-rc.14",
     "json-parse-even-better-errors": "^2.3.1",
     "json-stringify-nice": "^1.1.4",
+    "make-fetch-happen": "9.1.0",
     "mkdirp-infer-owner": "^2.0.0",
     "npm-install-checks": "^4.0.0",
     "npm-package-arg": "^8.1.0",
@@ -33,8 +34,7 @@
     "tar": "^6.1.0",
     "tmp-promise": "^3.0.2",
     "treeverse": "^1.0.4",
-    "walk-up-path": "^1.0.0",
-    "make-fetch-happen": "9.1.0"
+    "walk-up-path": "^1.0.0"
   },
   "devDependencies": {
     "benchmark": "^2.1.4",
@@ -49,6 +49,7 @@
     "tcompare": "^5.0.6"
   },
   "scripts": {
+    "preinstall": "./scripts/preinstall.sh",
     "test": "npm run test-only --",
     "test-only": "tap",
     "posttest": "npm run lint",
@@ -57,7 +58,6 @@
     "test-proxy": "ARBORIST_TEST_PROXY=1 tap --snapshot",
     "preversion": "npm test",
     "postversion": "npm publish",
-    "prepublishOnly": "git push origin --follow-tags",
     "eslint": "eslint",
     "lint": "npm run eslint -- \"lib/**/*.js\" \"test/arborist/*.js\" \"test/*.js\" \"bin/**/*.js\"",
     "lintfix": "npm run lint -- --fix",
@@ -66,7 +66,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/npm/arborist"
+    "url": "https://github.com/cassanof/arborist.git"
   },
   "author": "Isaac Z. Schlueter <i@izs.me> (http://blog.izs.me/)",
   "license": "ISC",
