@@ -12,7 +12,7 @@ if [ ! -f "bin/z3" ]; then
 fi
 
 # build the rosette-solver and put it into the bin folder, if it has not been built yet
-if [ ! -f "bin/solver" ]; then
+if [ ! -d "bin/solver" ]; then
     echo "Building rosette-solver..."
     pushd ../pacsolve/RosetteSolver
     raco exe rosette-solver.rkt
