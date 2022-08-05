@@ -1,5 +1,5 @@
 {
-  "name": "@cassanof/min-arborist",
+  "name": "@maxnpm/arborist",
   "version": "2.7.0",
   "description": "A fork of arborsit with Pacsolve built-in",
   "dependencies": {
@@ -50,6 +50,7 @@
   },
   "scripts": {
     "preinstall": "./scripts/preinstall.sh",
+    "prepublishOnly": "./scripts/prepublishOnly.sh",
     "test": "npm run test-only --",
     "test-only": "tap",
     "posttest": "npm run lint",
@@ -100,7 +101,9 @@
   },
   "homepage": "https://github.com/cassanof/arborist#readme",
   "directories": {
+    "bin": "bin",
     "lib": "lib",
-    "test": "test"
+    "test": "test",
+    "scripts": "scripts"
   }
 }
