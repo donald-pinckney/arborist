@@ -1,7 +1,7 @@
 {
   "name": "maxarborist",
   "version": "2.8.1",
-  "description": "A fork of arborsit with Pacsolve built-in",
+  "description": "A fork of arborist with Pacsolve built-in",
   "dependencies": {
     "@npmcli/installed-package-contents": "^1.0.7",
     "@npmcli/map-workspaces": "^1.0.2",
