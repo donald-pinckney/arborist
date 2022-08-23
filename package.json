@@ -1,6 +1,6 @@
 {
   "name": "maxarborist",
-  "version": "2.8.5",
+  "version": "2.8.6",
   "description": "A fork of arborist with Pacsolve built-in",
   "dependencies": {
     "@npmcli/installed-package-contents": "^1.0.7",
