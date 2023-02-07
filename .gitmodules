@@ -1,0 +1,3 @@
+[submodule "pacsolve"]
+	path = pacsolve
+	url = https://github.com/donald-pinckney/pacsolve
